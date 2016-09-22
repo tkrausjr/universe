@@ -5,7 +5,7 @@ certs:
 	mkdir certs && openssl req					\
 		-newkey rsa:4096 -nodes -sha256 -keyout certs/domain.key	\
 		-x509 -days 365 -out certs/domain.crt			\
-		-subj "/CN=master.mesos"
+		-subj "/CN=localhost"
 
 base: clean certs
 	docker build -t universe-base -f Dockerfile.base .

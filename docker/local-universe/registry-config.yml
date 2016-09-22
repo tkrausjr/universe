@@ -20,4 +20,4 @@ health:
     uploadpurging:
       enabled: false
     readonly:
-      enabled: true
+      enabled: false
