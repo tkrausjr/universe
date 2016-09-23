@@ -17,7 +17,7 @@ import urllib.parse
 import urllib.request
 import zipfile
 
-HTTP_ROOT = "http://nexus.mshome8082/"
+HTTP_ROOT = "http://nexus.mshome:8082/"
 DOCKER_ROOT = "quay.mshome:5000"
 
 def main():
@@ -69,6 +69,8 @@ def main():
 
     ### TK Added 1 line below
     dockerimages = list()
+    print(' Target Docker Registry is ' + DOCKER_ROOT)
+
 
     outputbasedir=os.path.curdir
     outputdir=outputbasedir + '/'+ 'output'
@@ -100,10 +102,11 @@ def main():
                 download_docker_image(name)
 
                 outname=(name.replace('/','_')+'.tar')
+                if outname.startswith('docker.io'):
+                    outname=outname[10:]
                 print ("Docker save filename = " + outname)
                 dockerimages.append(outname)
                 save_docker_image(docker_artifacts,outname,name)
-
 
         except (subprocess.CalledProcessError, urllib.error.HTTPError):
             print('MISSING ASSETS: {}'.format(package))
@@ -121,12 +124,11 @@ def main():
             print("Completed: {}".format(package))
 
     # TK added 1 line below to call the Docker images function
-    copy_output(dir_path,dockerimages,outputdir)
+    copy_output(dir_path,dockerimages,outputdir,HTTP_ROOT,DOCKER_ROOT)
 
     if failed_packages:
         print("Errors: {}".format(failed_packages))
         print("These packages are not included in the image.")
-
 
 def enumerate_dcos_packages(packages_path, package_names, only_selected):
     """Enumarate all of the package and revision to include
@@ -181,7 +183,6 @@ def enumerate_http_resources(package, package_path):
         for url in commands.get("pip", []):
             yield url, pathlib.Path(package, 'commands')
 
-
 def enumerate_docker_images(package_path):
     with (package_path / 'resource.json').open() as json_file:
         resource = json.load(json_file)
@@ -190,9 +191,6 @@ def enumerate_docker_images(package_path):
 
     return (name for _, name in dockers.items())
 
-def run_docker_registry():
-    print("Skipping Docker Registry Creation for now . . . ")
-
 @contextlib.contextmanager
 
 def download_docker_image(name):
@@ -200,14 +198,11 @@ def download_docker_image(name):
     command = ['docker', 'pull', name]
     subprocess.check_call(command)
 
-
 def format_image_name(host, name):
     # Probably has a hostname at the front, get rid of it.
-    print("Host = " + host)
     print("Name = " + name)
     if '.' in name.split(':')[0]:
         return '{}/{}'.format(host, "/".join(name.split("/")[1:]))
-
     return '{}/{}'.format(host, name)
 
 def save_docker_image(docker_artifacts,outname,name):
@@ -220,9 +215,13 @@ def save_docker_image(docker_artifacts,outname,name):
 
 # TK Lines below copy the docker_image_manifest, docker image tarballs, and http artifacts
 ############################
-def copy_output(dir_path,dockerimages,outputdir):
+def copy_output(dir_path,dockerimages,outputdir,HTTP_ROOT,DOCKER_ROOT):
     print ('Creating Docker Image Manifest')
     fileobj = open(dir_path.name +'/'+'dockerimages.txt', 'wt')
+    print('--------------------------------------------------',file=fileobj)
+    print('HTTP_ROOT='+HTTP_ROOT,file=fileobj)
+    print('DOCKER_ROOT='+DOCKER_ROOT,file=fileobj)
+    print('--------------------------------------------------',file=fileobj)
     for image in dockerimages:
         print('Docker Image is : ' + image)
         print(image,file=fileobj)
@@ -230,29 +229,12 @@ def copy_output(dir_path,dockerimages,outputdir):
     print ('Moving Artifacts to Output Directory')
     shutil.copytree(dir_path.name, outputdir)
 
-
-def build_universe_docker(dir_path):
-    print('Building the universe docker container')
-    current_dir = pathlib.Path(
-        os.path.dirname(os.path.realpath(__file__)))
-    shutil.copyfile(
-        str(current_dir / '..' / 'docker' / 'local-universe' / 'Dockerfile'),
-        str(dir_path / 'Dockerfile'))
-
-    command = [ 'docker', 'build', '-t',
-        'mesosphere/universe:{:.0f}'.format(time.time()),
-        '-t', 'mesosphere/universe:latest', '.' ]
-
-    subprocess.check_call(command, cwd=str(dir_path))
-
-
 def add_http_resource(dir_path, url, base_path):
     archive_path = (dir_path / base_path /
         pathlib.Path(urllib.parse.urlparse(url).path).name)
     print('Adding {} at {}.'.format(url, archive_path))
     os.makedirs(str(archive_path.parent), exist_ok=True)
     urllib.request.urlretrieve(url, str(archive_path))
-
 
 def prepare_repository(package, package_path, source_repo, dest_repo):
     dest_path = dest_repo / package_path.relative_to(source_repo)
@@ -302,7 +284,6 @@ def prepare_repository(package, package_path, source_repo, dest_repo):
             for uri in command.get("pip", [])
         ]
         json.dump(command, dest_file, indent=4)
-
 
 if __name__ == '__main__':
     sys.exit(main())
